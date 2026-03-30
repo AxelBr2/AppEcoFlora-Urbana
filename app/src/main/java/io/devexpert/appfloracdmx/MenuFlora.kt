@@ -124,7 +124,7 @@ fun FloraScreen(navController: NavHostController) {
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            // 🔍 Barra de Búsqueda Orgánica
+            //Barra de Búsqueda Orgánica
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
