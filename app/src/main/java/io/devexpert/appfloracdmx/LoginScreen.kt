@@ -1,5 +1,11 @@
 package io.devexpert.appfloracdmx
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -10,12 +16,23 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -30,17 +47,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import kotlinx.coroutines.launch
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,7 +86,7 @@ fun LoginScreen(
                 onSuccessLogin()
                 navController.navigate("pantalla_menuFlora")
             } else {
-                errorMessage = "Error al iniciar sesión, por favor, valide su correo y contraseña"
+                errorMessage = "Error al iniciar sesión, por favor valide su correo y contraseña."
                 showDialog = true
             }
         }
@@ -84,9 +105,9 @@ fun LoginScreen(
                 }
             } catch (e: Exception) {
                 if (e.message?.contains("nickname already exists") == true) {
-                    errorMessage = "Error al registrar su cuenta, verifique su correo o apodo."
+                    errorMessage = "El apodo ya está en uso. Por favor, elija otro."
                 } else {
-                    errorMessage = e.message ?: "Error desconocido al registrarse"
+                    errorMessage = e.message ?: "Error desconocido al registrarse."
                 }
                 showDialog = true
             }
@@ -94,152 +115,221 @@ fun LoginScreen(
     }
 
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .background(colorResource(id = R.color.black_2))
     ) {
         Image(
             painter = painterResource(id = R.drawable.fondo_login),
             contentDescription = null,
             contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxSize()
+        )
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            colorResource(id = R.color.black_2).copy(alpha = 0.9f)
+                        ),
+                        startY = 0f,
+                        endY = Float.POSITIVE_INFINITY
+                    )
+                )
         )
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(16.dp)
-                .background(Color.White.copy(alpha = 0.8f))
-                .padding(16.dp),
+                .padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Top
+            verticalArrangement = Arrangement.Center
         ) {
-            Text(
-                text = if (isSignUpMode) "Registrarse" else "Iniciar Sesión",
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 24.sp
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = colorResource(id = R.color.gray_antracita).copy(alpha = 0.9f)
                 ),
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Image(
-                painter = painterResource(id = R.drawable.logo_login),
-                contentDescription = "Trebol",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(16.dp))
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text("Correo electrónico", fontSize = 16.sp) },
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color.Blue,
-                    unfocusedBorderColor = Color.Gray,
-                    focusedLabelColor = Color.Blue,
-                    unfocusedLabelColor = Color.Gray
-                ),
-                modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                label = { Text("Contraseña", fontSize = 16.sp) },
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Color.Blue,
-                    unfocusedBorderColor = Color.Gray,
-                    focusedLabelColor = Color.Blue,
-                    unfocusedLabelColor = Color.Gray
-                ),
-                modifier = Modifier.fillMaxWidth(),
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
-            )
-
-            if (isSignUpMode) {
-                Spacer(modifier = Modifier.height(16.dp))
-
-                OutlinedTextField(
-                    value = nickname,
-                    onValueChange = { nickname = it },
-                    label = { Text("Ingresar apodo", fontSize = 16.sp) },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Color.Blue,
-                        unfocusedBorderColor = Color.Gray,
-                        focusedLabelColor = Color.Blue,
-                        unfocusedLabelColor = Color.Gray
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            Button(
-                onClick = { if (isSignUpMode) signUp() else signIn() },
+                shape = RoundedCornerShape(24.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (isSignUpMode) "Registrarse" else "Iniciar sesión", fontSize = 18.sp)
-            }
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.logo_login),
+                        contentDescription = "Logo Flora",
+                        modifier = Modifier
+                            .size(100.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                    )
 
-            Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
 
-            TextButton(onClick = { isSignUpMode = !isSignUpMode }) {
-                Text(
-                    text = if (isSignUpMode) "Ya tengo cuenta, iniciar sesión" else "Crear una cuenta",
-                    color = Color.Blue
-                )
-            }
+                    Text(
+                        text = if (isSignUpMode) "Crear Cuenta" else "Bienvenido",
+                        color = colorResource(id = R.color.principal_text),
+                        fontSize = 26.sp,
+                        fontWeight = FontWeight.Bold
+                    )
 
-            Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Registra y monitorea tus plantas",
+                        color = colorResource(id = R.color.secondary_text),
+                        fontSize = 14.sp,
+                        modifier = Modifier.padding(bottom = 24.dp)
+                    )
 
-            TextButton(onClick = { navController.navigate("pantalla_recuperar") }) {
-                Text(
-                    text = "¿Olvidaste tu contraseña?",
-                    color = Color.Blue,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+                    OrganicTextField(
+                        value = email,
+                        onValueChange = { email = it },
+                        label = "Correo electrónico",
+                        icon = Icons.Filled.Email
+                    )
 
-            errorMessage?.let {
-                Text(
-                    text = it,
-                    color = Color.Red,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (showDialog) {
-                    MyDialog(
-                        title = if (isSignUpMode) "Error al registrarse" else "Error al iniciar sesión",
-                        text = errorMessage ?: "Error desconocido"
-                    ) { showDialog = false }
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    OrganicTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = "Contraseña",
+                        icon = Icons.Filled.Lock,
+                        isPassword = true
+                    )
+
+                    AnimatedVisibility(
+                        visible = isSignUpMode,
+                        enter = fadeIn(tween(300)) + expandVertically(tween(300)),
+                        exit = fadeOut(tween(300)) + shrinkVertically(tween(300))
+                    ) {
+                        Column {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            OrganicTextField(
+                                value = nickname,
+                                onValueChange = { nickname = it },
+                                label = "Apodo botánico",
+                                icon = Icons.Filled.Person
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(32.dp))
+
+                    Button(
+                        onClick = { if (isSignUpMode) signUp() else signIn() },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        shape = RoundedCornerShape(50),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colorResource(id = R.color.green_esmerald),
+                            contentColor = colorResource(id = R.color.black_2)
+                        )
+                    ) {
+                        Text(
+                            text = if (isSignUpMode) "Registrarse" else "Iniciar sesión",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    TextButton(onClick = { isSignUpMode = !isSignUpMode }) {
+                        Text(
+                            text = if (isSignUpMode) "¿Ya tienes cuenta? Inicia sesión" else "¿Nuevo aquí? Crea una cuenta",
+                            color = colorResource(id = R.color.violet_electric),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    if (!isSignUpMode) {
+                        TextButton(onClick = { navController.navigate("pantalla_recuperar") }) {
+                            Text(
+                                text = "¿Olvidaste tu contraseña?",
+                                color = colorResource(id = R.color.secondary_text),
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
                 }
             }
         }
+
+        if (showDialog) {
+            MyDialog(
+                title = if (isSignUpMode) "Error de Registro" else "Error de Autenticación",
+                text = errorMessage ?: "Ocurrió un error inesperado.",
+                onDismiss = { showDialog = false }
+            )
+        }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun OrganicTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    icon: ImageVector,
+    isPassword: Boolean = false
+) {
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        label = { Text(label, color = colorResource(id = R.color.secondary_text)) },
+        leadingIcon = {
+            Icon(icon, contentDescription = null, tint = colorResource(id = R.color.secondary_text))
+        },
+        trailingIcon = {
+            if (isPassword) {
+                val image = if (passwordVisible) Icons.Filled.Visibility else Icons.Filled.VisibilityOff
+                IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Icon(image, contentDescription = null, tint = colorResource(id = R.color.secondary_text))
+                }
+            }
+        },
+        visualTransformation = if (isPassword && !passwordVisible) PasswordVisualTransformation() else VisualTransformation.None,
+        keyboardOptions = KeyboardOptions(keyboardType = if (isPassword) KeyboardType.Password else KeyboardType.Email),
+        shape = RoundedCornerShape(50),
+        colors = OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = colorResource(id = R.color.green_esmerald),
+            unfocusedBorderColor = Color.Transparent,
+            focusedContainerColor = colorResource(id = R.color.black_2).copy(alpha = 0.5f),
+            unfocusedContainerColor = colorResource(id = R.color.black_2).copy(alpha = 0.3f),
+            focusedTextColor = colorResource(id = R.color.principal_text),
+            unfocusedTextColor = colorResource(id = R.color.principal_text),
+            cursorColor = colorResource(id = R.color.green_esmerald)
+        ),
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true
+    )
 }
 
 @Composable
 fun MyDialog(title: String, text: String, onDismiss: () -> Unit) {
     AlertDialog(
+        containerColor = colorResource(id = R.color.gray_antracita),
+        titleContentColor = colorResource(id = R.color.principal_text),
+        textContentColor = colorResource(id = R.color.secondary_text),
         onDismissRequest = { onDismiss() },
+        title = { Text(text = title, fontWeight = FontWeight.Bold) },
+        text = { Text(text = text) },
         confirmButton = {
             TextButton(onClick = { onDismiss() }) {
-                Text(text = "Aceptar")
+                Text(
+                    text = "Entendido",
+                    color = colorResource(id = R.color.green_esmerald),
+                    fontWeight = FontWeight.Bold
+                )
             }
         },
-        title = { Text(text = title) },
-        text = { Text(text = text) }
+        shape = RoundedCornerShape(24.dp)
     )
 }
