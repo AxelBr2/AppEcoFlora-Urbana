@@ -163,7 +163,7 @@ fun LoginScreen(
                         painter = painterResource(id = R.drawable.logo_login),
                         contentDescription = "Logo Flora",
                         modifier = Modifier
-                            .size(100.dp)
+                            .size(150.dp)
                             .clip(RoundedCornerShape(20.dp))
                     )
 
