@@ -2,14 +2,13 @@ package io.devexpert.appfloracdmx
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.content.Context
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
-import android.util.Log
+import android.graphics.Bitmap
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.result.launch
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -21,22 +20,24 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.EnergySavingsLeaf
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MedicalServices
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -59,34 +60,30 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.app.ActivityCompat
 import androidx.navigation.NavHostController
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
-import com.google.api.client.http.javanet.NetHttpTransport
-import com.google.api.client.json.gson.GsonFactory
-import com.google.api.services.drive.Drive
-import com.google.api.services.drive.DriveScopes
-import com.google.auth.http.HttpCredentialsAdapter
-import com.google.auth.oauth2.GoogleCredentials
 import com.google.firebase.firestore.FirebaseFirestore
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import com.google.firebase.ktx.Firebase
+import com.google.firebase.storage.ktx.storage
+import java.io.ByteArrayOutputStream
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FloraRegistrationScreen(navController: NavHostController) {
-    // INSTANCIA DE FIRESTORE
+    val context = navController.context
     val db = FirebaseFirestore.getInstance()
+    val storage = Firebase.storage
 
-    // Define variables de estado para cada campo de texto
+    // ESTADOS DEL FORMULARIO (Mantenemos tu lógica original)
     var descripcion by remember { mutableStateOf("") }
     var nombreEspecie by remember { mutableStateOf("") }
     var cuidados by remember { mutableStateOf("") }
@@ -100,52 +97,52 @@ fun FloraRegistrationScreen(navController: NavHostController) {
     var isExpanded by remember { mutableStateOf(false) }
     var selectedText by remember { mutableStateOf(list[0]) }
 
+    // ESTADOS PARA CÁMARA Y SUBIDA
+    var bitmapCapturado by remember { mutableStateOf<Bitmap?>(null) }
+    var isSubiendo by remember { mutableStateOf(false) }
+
     val fusedLocationClient = remember {
-        LocationServices.getFusedLocationProviderClient(navController.context)
+        LocationServices.getFusedLocationProviderClient(context)
     }
 
+    // LAUNCHER PARA CÁMARA
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicturePreview()
+    ) { bitmap ->
+        if (bitmap != null) bitmapCapturado = bitmap
+    }
+
+    // LAUNCHER PARA PERMISOS (Corregido para evitar error de 'it')
     val requestPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            fetchLocation(fusedLocationClient) { location ->
-                localizacion = location
-            }
-        } else {
-            localizacion = "Permiso denegado"
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val locationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
+        val cameraGranted = permissions[Manifest.permission.CAMERA] ?: false
+
+        if (locationGranted) {
+            fetchLocation(fusedLocationClient) { coords -> localizacion = coords }
+        }
+        if (cameraGranted) {
+            cameraLauncher.launch()
         }
     }
-
-    val driveFolderId = "133PDjgu39iS5jorBZmtZOojX92pOycoR"
 
     Scaffold(
         containerColor = colorResource(id = R.color.black_2),
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        text = "Registro de Flora",
-                        fontWeight = FontWeight.Bold,
-                        color = colorResource(id = R.color.green_esmerald)
-                    )
+                    Text(text = "Registro de Flora", fontWeight = FontWeight.Bold, color = colorResource(id = R.color.green_esmerald))
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            imageVector = Icons.Default.ArrowBack,
-                            contentDescription = "Volver",
-                            tint = colorResource(id = R.color.principal_text)
-                        )
+                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Volver", tint = Color.White)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = colorResource(id = R.color.black_2),
-                    scrolledContainerColor = colorResource(id = R.color.black_2)
-                )
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = colorResource(id = R.color.black_2))
             )
         }
     ) { paddingValues ->
-        // VISTAS JETPACK COMPOSE REDISEÑADAS
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -154,97 +151,39 @@ fun FloraRegistrationScreen(navController: NavHostController) {
             verticalArrangement = Arrangement.spacedBy(20.dp),
             contentPadding = PaddingValues(vertical = 24.dp)
         ) {
-
             item {
-                Text(
-                    text = "Información Botánica",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        color = colorResource(id = R.color.violet_electric),
-                        fontWeight = FontWeight.Bold
-                    ),
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-
-                OrganicInput(
-                    value = nombreEspecie,
-                    onValueChange = { nombreEspecie = it },
-                    label = "Nombre de la especie",
-                    icon = Icons.Default.EnergySavingsLeaf
-                )
+                Text(text = "Información Botánica", style = MaterialTheme.typography.titleMedium.copy(color = colorResource(id = R.color.violet_electric), fontWeight = FontWeight.Bold))
+                OrganicInput(value = nombreEspecie, onValueChange = { nombreEspecie = it }, label = "Nombre de la especie", icon = Icons.Default.EnergySavingsLeaf)
             }
 
-            item {
-                OrganicInput(
-                    value = descripcion,
-                    onValueChange = { descripcion = it },
-                    label = "Descripción",
-                    icon = Icons.Default.Description,
-                    singleLine = false,
-                    lines = 4
-                )
-            }
+            item { OrganicInput(value = descripcion, onValueChange = { descripcion = it }, label = "Descripción", icon = Icons.Default.Description, singleLine = false, lines = 4) }
+
+            item { OrganicInput(value = cuidados, onValueChange = { cuidados = it }, label = "Cuidados", icon = Icons.Default.MedicalServices, singleLine = false, lines = 2) }
 
             item {
-                OrganicInput(
-                    value = cuidados,
-                    onValueChange = { cuidados = it },
-                    label = "Cuidados",
-                    icon = Icons.Default.MedicalServices,
-                    singleLine = false,
-                    lines = 2
-                )
-            }
+                HorizontalDivider(color = colorResource(id = R.color.gray_antracita), thickness = 1.dp)
+                Text(text = "Ubicación", style = MaterialTheme.typography.titleMedium.copy(color = colorResource(id = R.color.violet_electric), fontWeight = FontWeight.Bold))
 
-            item {
-                HorizontalDivider(color = colorResource(id = R.color.gray_antracita), thickness = 1.dp, modifier = Modifier.padding(vertical = 8.dp))
-
-                Text(
-                    text = "Ubicación",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        color = colorResource(id = R.color.violet_electric),
-                        fontWeight = FontWeight.Bold
-                    ),
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-
-                ExposedDropdownMenuBox(
-                    expanded = isExpanded,
-                    onExpandedChange = { isExpanded = !isExpanded }
-                ) {
+                ExposedDropdownMenuBox(expanded = isExpanded, onExpandedChange = { isExpanded = !isExpanded }) {
                     OutlinedTextField(
-                        value = selectedText,
-                        onValueChange = {},
-                        readOnly = true,
+                        value = selectedText, onValueChange = {}, readOnly = true,
                         label = { Text("Alcaldía", color = colorResource(id = R.color.secondary_text)) },
-                        leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, tint = colorResource(id = R.color.secondary_text)) },
+                        leadingIcon = { Icon(Icons.Default.LocationOn, null, tint = colorResource(id = R.color.secondary_text)) },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isExpanded) },
-                        modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth(),
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
                         shape = RoundedCornerShape(24.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = colorResource(id = R.color.green_esmerald),
                             unfocusedBorderColor = Color.Transparent,
                             focusedContainerColor = colorResource(id = R.color.gray_antracita),
                             unfocusedContainerColor = colorResource(id = R.color.gray_antracita),
-                            focusedTextColor = colorResource(id = R.color.principal_text),
-                            unfocusedTextColor = colorResource(id = R.color.principal_text)
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
                         )
                     )
-
-                    ExposedDropdownMenu(
-                        expanded = isExpanded,
-                        onDismissRequest = { isExpanded = false },
-                        modifier = Modifier.background(colorResource(id = R.color.gray_antracita))
-                    ) {
-                        list.forEachIndexed { index, text ->
-                            DropdownMenuItem(
-                                text = { Text(text = text, color = colorResource(id = R.color.principal_text)) },
-                                onClick = {
-                                    selectedText = list[index]
-                                    isExpanded = false
-                                }
-                            )
+                    ExposedDropdownMenu(expanded = isExpanded, onDismissRequest = { isExpanded = false }) {
+                        list.forEach { text ->
+                            DropdownMenuItem(text = { Text(text) }, onClick = { selectedText = text; isExpanded = false })
                         }
                     }
                 }
@@ -256,124 +195,92 @@ fun FloraRegistrationScreen(navController: NavHostController) {
                     shape = RoundedCornerShape(24.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Coordenadas", color = colorResource(id = R.color.secondary_text), fontSize = 12.sp)
-                            Text(
-                                text = if (localizacion.isEmpty()) "Pendiente..." else localizacion,
-                                color = if (localizacion.isEmpty()) colorResource(id = R.color.secondary_text) else colorResource(id = R.color.principal_text),
-                                fontWeight = FontWeight.Bold
-                            )
+                            Text(text = localizacion.ifEmpty { "Pendiente..." }, color = Color.White, fontWeight = FontWeight.Bold)
                         }
-
                         IconButton(
-                            onClick = {
-                                // TU LÓGICA EXACTA DE UBICACIÓN
-                                if (ActivityCompat.checkSelfPermission(
-                                        navController.context,
-                                        Manifest.permission.ACCESS_FINE_LOCATION
-                                    ) != PackageManager.PERMISSION_GRANTED
-                                ) {
-                                    requestPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                                } else {
-                                    fetchLocation(fusedLocationClient) { location ->
-                                        localizacion = location
-                                    }
-                                }
-                            },
-                            modifier = Modifier
-                                .background(colorResource(id = R.color.violet_electric).copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                        ) {
-                            Icon(Icons.Default.Map, contentDescription = "Obtener ubicación", tint = colorResource(id = R.color.violet_electric))
-                        }
+                            onClick = { requestPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)) },
+                            modifier = Modifier.background(colorResource(id = R.color.violet_electric).copy(alpha = 0.2f), RoundedCornerShape(12.dp))
+                        ) { Icon(Icons.Default.Map, null, tint = colorResource(id = R.color.violet_electric)) }
                     }
                 }
             }
 
             item {
-                HorizontalDivider(color = colorResource(id = R.color.gray_antracita), thickness = 1.dp, modifier = Modifier.padding(vertical = 8.dp))
+                HorizontalDivider(color = colorResource(id = R.color.gray_antracita), thickness = 1.dp)
+                // SECCIÓN CÁMARA
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    OutlinedButton(
+                        onClick = { requestPermissionLauncher.launch(arrayOf(Manifest.permission.CAMERA)) },
+                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        shape = RoundedCornerShape(50),
+                        border = BorderStroke(1.dp, colorResource(id = R.color.secondary_text)),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                    ) {
+                        Icon(Icons.Default.PhotoCamera, null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (bitmapCapturado == null) "Tomar Foto de Planta" else "Foto Capturada ✓")
+                    }
 
-                // BOTÓN: SUBIR IMAGEN (Tu lógica exacta)
-                OutlinedButton(
-                    onClick = {
-                        // Intent para abrir la carpeta de Google Drive
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://drive.google.com/drive/folders/$driveFolderId"))
-                        navController.context.startActivity(intent)
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(50),
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = colorResource(id = R.color.principal_text)
-                    ),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, colorResource(id = R.color.secondary_text))
-                ) {
-                    Icon(Icons.Default.CloudUpload, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Subir Imagen")
+                    bitmapCapturado?.let {
+                        Spacer(Modifier.height(12.dp))
+                        Image(
+                            bitmap = it.asImageBitmap(),
+                            contentDescription = null,
+                            modifier = Modifier.size(150.dp).clip(RoundedCornerShape(24.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
                 }
             }
 
             item {
-                // BOTÓN: ENVIAR DATOS (Tu lógica exacta de validación y Firebase)
                 Button(
                     onClick = {
-                        if (nombreEspecie.isNotBlank() && descripcion.isNotBlank() && cuidados.isNotBlank() && localizacion.isNotBlank() && localizacion.isNotBlank()) {
-                            // Llama a la función para buscar la imagen más reciente
-                            val context = navController.context
-                            getMostRecentImageUrl(context, driveFolderId) { imageUrl ->
-                                if (imageUrl != null) {
-                                    val formattedUrl = "https://drive.google.com/uc?id=$imageUrl"
-                                    val floraData = mapOf(
-                                        "nombreEspecie" to nombreEspecie,
-                                        "descripcion" to descripcion,
-                                        "cuidados" to cuidados,
-                                        "localizacion" to localizacion,
-                                        "alcaldia" to selectedText,
-                                        "url" to formattedUrl
-                                    )
-                                    db.collection("Flora_datos")
-                                        .add(floraData)
-                                        .addOnSuccessListener {
-                                            Toast.makeText(context, "¡Datos enviados correctamente!", Toast.LENGTH_SHORT).show()
-                                        }
-                                        .addOnFailureListener { e ->
-                                            Toast.makeText(context, "Error al enviar datos: ${e.message}", Toast.LENGTH_SHORT).show()
-                                        }
-                                } else {
-                                    Toast.makeText(context, "No se encontró ninguna imagen", Toast.LENGTH_SHORT).show()
+                        if (nombreEspecie.isNotBlank() && bitmapCapturado != null && localizacion.isNotBlank()) {
+                            isSubiendo = true
+                            subirTodoAFirebase(
+                                bitmap = bitmapCapturado!!,
+                                storage = storage,
+                                db = db,
+                                data = mapOf(
+                                    "nombreEspecie" to nombreEspecie,
+                                    "descripcion" to descripcion,
+                                    "cuidados" to cuidados,
+                                    "alcaldia" to selectedText,
+                                    "localizacion" to localizacion
+                                )
+                            ) { success ->
+                                isSubiendo = false
+                                if (success) {
+                                    Toast.makeText(context, "¡Registro Exitoso!", Toast.LENGTH_SHORT).show()
+                                    navController.popBackStack()
                                 }
                             }
                         } else {
-                            Toast.makeText(navController.context, "Campos incompletos", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Faltan datos o la fotografía", Toast.LENGTH_SHORT).show()
                         }
                     },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
                     shape = RoundedCornerShape(50),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = colorResource(id = R.color.green_esmerald),
-                        contentColor = colorResource(id = R.color.black_2)
-                    )
+                    enabled = !isSubiendo,
+                    colors = ButtonDefaults.buttonColors(containerColor = colorResource(id = R.color.green_esmerald))
                 ) {
-                    Icon(Icons.Default.Spa, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Enviar datos", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    if (isSubiendo) CircularProgressIndicator(color = Color.Black, modifier = Modifier.size(24.dp))
+                    else {
+                        Icon(Icons.Default.Spa, null, tint = Color.Black)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Enviar datos", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
                 }
             }
         }
     }
 }
 
-// COMPONENTE UI PARA LOS INPUTS (Conserva el diseño moderno)
+// COMPONENTE UI PARA LOS INPUTS (Mantiene tu diseño original)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrganicInput(
@@ -400,82 +307,41 @@ fun OrganicInput(
             unfocusedBorderColor = Color.Transparent,
             focusedContainerColor = colorResource(id = R.color.gray_antracita),
             unfocusedContainerColor = colorResource(id = R.color.gray_antracita),
-            focusedTextColor = colorResource(id = R.color.principal_text),
-            unfocusedTextColor = colorResource(id = R.color.principal_text),
+            focusedTextColor = Color.White,
+            unfocusedTextColor = Color.White,
             cursorColor = colorResource(id = R.color.green_esmerald)
         )
     )
 }
 
-// TUS FUNCIONES EXACTAS AL FINAL DEL ARCHIVO
+// FUNCIONES DE APOYO (Ubicación y Firebase)
 @SuppressLint("MissingPermission")
-fun fetchLocation(
-    fusedLocationClient: FusedLocationProviderClient,
-    onLocationFetched: (String) -> Unit
-) {
+fun fetchLocation(fusedLocationClient: FusedLocationProviderClient, onLocationFetched: (String) -> Unit) {
     fusedLocationClient.lastLocation.addOnSuccessListener { location ->
-        if (location != null) {
-            val coordinates = "${location.latitude}, ${location.longitude}"
-            onLocationFetched(coordinates)
-        } else {
-            onLocationFetched("No se pudo obtener la ubicación")
-        }
+        if (location != null) onLocationFetched("${location.latitude}, ${location.longitude}")
+        else onLocationFetched("Ubicación no disponible")
     }
 }
 
-fun getMostRecentImageUrl(context: Context, folderId: String, callback: (String?) -> Unit) {
-    try {
-        // Carga las credenciales desde el archivo JSON
-        val credentialsStream = context.resources.openRawResource(R.raw.credentials)
-        val googleCredentials = GoogleCredentials.fromStream(credentialsStream)
-            .createScoped(listOf(DriveScopes.DRIVE_READONLY))
+fun subirTodoAFirebase(
+    bitmap: Bitmap,
+    storage: com.google.firebase.storage.FirebaseStorage,
+    db: com.google.firebase.firestore.FirebaseFirestore,
+    data: Map<String, String>,
+    onResult: (Boolean) -> Unit
+) {
+    val storageRef = storage.reference.child("flora_fotos/plant_${System.currentTimeMillis()}.jpg")
+    val baos = ByteArrayOutputStream()
+    bitmap.compress(Bitmap.CompressFormat.JPEG, 80, baos)
 
-        // Construir el cliente de Google Drive
-        val httpRequestInitializer = HttpCredentialsAdapter(googleCredentials)
-        val driveService = Drive.Builder(
-            NetHttpTransport(),
-            GsonFactory(),
-            httpRequestInitializer
-        ).setApplicationName("FloraApp").build()
+    storageRef.putBytes(baos.toByteArray()).addOnSuccessListener {
+        storageRef.downloadUrl.addOnSuccessListener { uri ->
+            val finalData = data.toMutableMap()
+            finalData["url"] = uri.toString()
 
-        // Usar corrutinas para realizar la solicitud
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                // Consulta los archivos en la carpeta específica y ordena por la fecha de modificación
-                val result = driveService.files().list()
-                    .setQ("'$folderId' in parents and mimeType contains 'image/'")
-                    .setFields("files(id, name, modifiedTime)")
-                    .setOrderBy("modifiedTime desc")
-                    .execute()
-
-                // Verifica si se obtuvo al menos un archivo
-                val mostRecentFile = result.files.firstOrNull()
-
-                // Si se encuentra un archivo, devuelve su URL
-                withContext(Dispatchers.Main) {
-                    if (mostRecentFile != null) {
-                        // Log para verificar el ID del archivo recuperado
-                        Log.d("DriveAPI", "Imagen encontrada: ${mostRecentFile.name}, ID: ${mostRecentFile.id}")
-
-                        // Formato de la URL según lo solicitado
-                        val formattedUrl = mostRecentFile.id
-                        Log.d("DriveAPI", "URL formateada: $formattedUrl") // Verifica la URL generada
-                        callback(formattedUrl)
-                    } else {
-                        // Si no se encuentra ningún archivo, se pasa null
-                        Log.d("DriveAPI", "No se encontró ninguna imagen.")
-                        callback(null)
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e("DriveAPI", "Error al listar archivos: ${e.message}")
-                withContext(Dispatchers.Main) {
-                    callback(null)
-                }
-            }
+            db.collection("Flora_datos").add(finalData)
+                .addOnSuccessListener { onResult(true) }
+                .addOnFailureListener { onResult(false) }
         }
-    } catch (e: Exception) {
-        Log.e("DriveAPI", "Error al inicializar GoogleCredentials: ${e.message}")
-        callback(null)
-    }
+    }.addOnFailureListener { onResult(false) }
 }
