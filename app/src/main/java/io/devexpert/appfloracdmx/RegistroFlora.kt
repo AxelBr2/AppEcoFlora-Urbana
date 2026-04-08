@@ -2,11 +2,10 @@ package io.devexpert.appfloracdmx
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.graphics.Bitmap
+import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.result.launch
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -62,57 +61,65 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.FileProvider
 import androidx.navigation.NavHostController
+import coil.compose.rememberAsyncImagePainter
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.ktx.storage
-import java.io.ByteArrayOutputStream
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FloraRegistrationScreen(navController: NavHostController) {
-    val context = navController.context
+    val context = LocalContext.current
     val db = FirebaseFirestore.getInstance()
     val storage = Firebase.storage
 
-    // ESTADOS DEL FORMULARIO (Mantenemos tu lógica original)
-    var descripcion by remember { mutableStateOf("") }
+    // ESTADOS DEL FORMULARIO
     var nombreEspecie by remember { mutableStateOf("") }
+    var descripcion by remember { mutableStateOf("") }
     var cuidados by remember { mutableStateOf("") }
     var localizacion by remember { mutableStateOf("") }
+    var selectedText by remember { mutableStateOf("Álvaro Obregón") }
+    var isExpanded by remember { mutableStateOf(false) }
+
+    // ESTADOS DE IMAGEN HD
+    var fotoUri by remember { mutableStateOf<Uri?>(null) }
+    var isSubiendo by remember { mutableStateOf(false) }
 
     val list = listOf(
         "Álvaro Obregón", "Azcapotzalco", "Benito Juárez", "Coyoacán", "Cuajimalpa",
         "Cuauhtémoc", "Gustavo A. Madero", "Iztacalco", "Iztapalapa", "Magdalena Contreras",
         "Miguel Hidalgo", "Milpa Alta", "Tláhuac", "Tlalpan", "Venustiano Carranza", "Xochimilco"
     )
-    var isExpanded by remember { mutableStateOf(false) }
-    var selectedText by remember { mutableStateOf(list[0]) }
 
-    // ESTADOS PARA CÁMARA Y SUBIDA
-    var bitmapCapturado by remember { mutableStateOf<Bitmap?>(null) }
-    var isSubiendo by remember { mutableStateOf(false) }
+    val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
 
-    val fusedLocationClient = remember {
-        LocationServices.getFusedLocationProviderClient(context)
+    // Función para crear la ruta del archivo temporal (HD)
+    fun crearImagenUri(): Uri {
+        val directory = File(context.externalCacheDir, "flora_photos")
+        if (!directory.exists()) directory.mkdirs()
+        val file = File(directory, "captura_${System.currentTimeMillis()}.jpg")
+        return FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
     }
 
-    // LAUNCHER PARA CÁMARA
+    // LAUNCHER CÁMARA HD
     val cameraLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.TakePicturePreview()
-    ) { bitmap ->
-        if (bitmap != null) bitmapCapturado = bitmap
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (!success) fotoUri = null
     }
 
-    // LAUNCHER PARA PERMISOS (Corregido para evitar error de 'it')
+    // LAUNCHER PERMISOS
     val requestPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -123,7 +130,9 @@ fun FloraRegistrationScreen(navController: NavHostController) {
             fetchLocation(fusedLocationClient) { coords -> localizacion = coords }
         }
         if (cameraGranted) {
-            cameraLauncher.launch()
+            val uri = crearImagenUri()
+            fotoUri = uri
+            cameraLauncher.launch(uri)
         }
     }
 
@@ -131,12 +140,10 @@ fun FloraRegistrationScreen(navController: NavHostController) {
         containerColor = colorResource(id = R.color.black_2),
         topBar = {
             TopAppBar(
-                title = {
-                    Text(text = "Registro de Flora", fontWeight = FontWeight.Bold, color = colorResource(id = R.color.green_esmerald))
-                },
+                title = { Text("Registro de Flora HD", fontWeight = FontWeight.Bold, color = colorResource(id = R.color.green_esmerald)) },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Volver", tint = Color.White)
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Volver", tint = Color.White)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = colorResource(id = R.color.black_2))
@@ -144,21 +151,42 @@ fun FloraRegistrationScreen(navController: NavHostController) {
         }
     ) { paddingValues ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(horizontal = 24.dp),
+            modifier = Modifier.fillMaxSize().padding(paddingValues).padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
             contentPadding = PaddingValues(vertical = 24.dp)
         ) {
             item {
-                Text(text = "Información Botánica", style = MaterialTheme.typography.titleMedium.copy(color = colorResource(id = R.color.violet_electric), fontWeight = FontWeight.Bold))
-                OrganicInput(value = nombreEspecie, onValueChange = { nombreEspecie = it }, label = "Nombre de la especie", icon = Icons.Default.EnergySavingsLeaf)
+                Text("Información Botánica", style = MaterialTheme.typography.titleMedium.copy(), color = colorResource(id = R.color.violet_electric), fontWeight = FontWeight.Bold)
+
+                OrganicInput(
+                    value = nombreEspecie,
+                    onValueChange = {nombreEspecie = it},
+                    label = "Nombre de la especie",
+                    icon = Icons.Default.EnergySavingsLeaf
+                )
             }
 
-            item { OrganicInput(value = descripcion, onValueChange = { descripcion = it }, label = "Descripción", icon = Icons.Default.Description, singleLine = false, lines = 4) }
+            item {
+                OrganicInput(
+                    value = descripcion,
+                    onValueChange = {descripcion = it},
+                    label = "Descripción",
+                    icon = Icons.Default.Description,
+                    singleLine = false,
+                    lines = 4
+                )
+            }
 
-            item { OrganicInput(value = cuidados, onValueChange = { cuidados = it }, label = "Cuidados", icon = Icons.Default.MedicalServices, singleLine = false, lines = 2) }
+            item {
+                OrganicInput(
+                    value = cuidados,
+                    onValueChange = {cuidados = it},
+                    label = "Cuidados",
+                    icon = Icons.Default.MedicalServices,
+                    singleLine = false,
+                    lines = 2
+                )
+            }
 
             item {
                 HorizontalDivider(color = colorResource(id = R.color.gray_antracita), thickness = 1.dp)
@@ -177,8 +205,8 @@ fun FloraRegistrationScreen(navController: NavHostController) {
                             unfocusedBorderColor = Color.Transparent,
                             focusedContainerColor = colorResource(id = R.color.gray_antracita),
                             unfocusedContainerColor = colorResource(id = R.color.gray_antracita),
-                            focusedTextColor = Color.White,
-                            unfocusedTextColor = Color.White
+                            focusedTextColor = colorResource(id = R.color.secondary_text),
+                            unfocusedTextColor = colorResource(id = R.color.secondary_text)
                         )
                     )
                     ExposedDropdownMenu(expanded = isExpanded, onDismissRequest = { isExpanded = false }) {
@@ -190,15 +218,11 @@ fun FloraRegistrationScreen(navController: NavHostController) {
             }
 
             item {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = colorResource(id = R.color.gray_antracita)),
-                    shape = RoundedCornerShape(24.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Card(colors = CardDefaults.cardColors(containerColor = colorResource(id = R.color.gray_antracita)), shape = RoundedCornerShape(24.dp), modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Coordenadas", color = colorResource(id = R.color.secondary_text), fontSize = 12.sp)
-                            Text(text = localizacion.ifEmpty { "Pendiente..." }, color = Color.White, fontWeight = FontWeight.Bold)
+                            Text(text = localizacion.ifEmpty { "Pendiente..." }, color = colorResource(id = R.color.secondary_text), fontWeight = FontWeight.Bold)
                         }
                         IconButton(
                             onClick = { requestPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)) },
@@ -210,8 +234,8 @@ fun FloraRegistrationScreen(navController: NavHostController) {
 
             item {
                 HorizontalDivider(color = colorResource(id = R.color.gray_antracita), thickness = 1.dp)
-                // SECCIÓN CÁMARA
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     OutlinedButton(
                         onClick = { requestPermissionLauncher.launch(arrayOf(Manifest.permission.CAMERA)) },
                         modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -221,15 +245,15 @@ fun FloraRegistrationScreen(navController: NavHostController) {
                     ) {
                         Icon(Icons.Default.PhotoCamera, null)
                         Spacer(Modifier.width(8.dp))
-                        Text(if (bitmapCapturado == null) "Tomar Foto de Planta" else "Foto Capturada ✓")
+                        Text(if (fotoUri == null) "Tomar Foto HD" else "Cambiar Imagen")
                     }
 
-                    bitmapCapturado?.let {
+                    fotoUri?.let { uri ->
                         Spacer(Modifier.height(12.dp))
                         Image(
-                            bitmap = it.asImageBitmap(),
+                            painter = rememberAsyncImagePainter(uri),
                             contentDescription = null,
-                            modifier = Modifier.size(150.dp).clip(RoundedCornerShape(24.dp)),
+                            modifier = Modifier.size(180.dp).clip(RoundedCornerShape(24.dp)),
                             contentScale = ContentScale.Crop
                         )
                     }
@@ -239,10 +263,10 @@ fun FloraRegistrationScreen(navController: NavHostController) {
             item {
                 Button(
                     onClick = {
-                        if (nombreEspecie.isNotBlank() && bitmapCapturado != null && localizacion.isNotBlank()) {
+                        if (nombreEspecie.isNotBlank() && fotoUri != null && localizacion.isNotBlank()) {
                             isSubiendo = true
-                            subirTodoAFirebase(
-                                bitmap = bitmapCapturado!!,
+                            subirInfoFirebase(
+                                uri = fotoUri!!,
                                 storage = storage,
                                 db = db,
                                 data = mapOf(
@@ -255,12 +279,12 @@ fun FloraRegistrationScreen(navController: NavHostController) {
                             ) { success ->
                                 isSubiendo = false
                                 if (success) {
-                                    Toast.makeText(context, "¡Registro Exitoso!", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "¡Planta Registrada con Éxito!", Toast.LENGTH_SHORT).show()
                                     navController.popBackStack()
                                 }
                             }
                         } else {
-                            Toast.makeText(context, "Faltan datos o la fotografía", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Datos incompletos o falta imagen", Toast.LENGTH_SHORT).show()
                         }
                     },
                     modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -280,7 +304,7 @@ fun FloraRegistrationScreen(navController: NavHostController) {
     }
 }
 
-// COMPONENTE UI PARA LOS INPUTS (Mantiene tu diseño original)
+// --- COMPONENTE DE UI PARA INPUTS ---
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrganicInput(
@@ -308,13 +332,12 @@ fun OrganicInput(
             focusedContainerColor = colorResource(id = R.color.gray_antracita),
             unfocusedContainerColor = colorResource(id = R.color.gray_antracita),
             focusedTextColor = Color.White,
-            unfocusedTextColor = Color.White,
-            cursorColor = colorResource(id = R.color.green_esmerald)
+            unfocusedTextColor = Color.White
         )
     )
 }
 
-// FUNCIONES DE APOYO (Ubicación y Firebase)
+// --- FUNCIONES DE APOYO ---
 @SuppressLint("MissingPermission")
 fun fetchLocation(fusedLocationClient: FusedLocationProviderClient, onLocationFetched: (String) -> Unit) {
     fusedLocationClient.lastLocation.addOnSuccessListener { location ->
@@ -323,22 +346,18 @@ fun fetchLocation(fusedLocationClient: FusedLocationProviderClient, onLocationFe
     }
 }
 
-fun subirTodoAFirebase(
-    bitmap: Bitmap,
+fun subirInfoFirebase(
+    uri: Uri,
     storage: com.google.firebase.storage.FirebaseStorage,
     db: com.google.firebase.firestore.FirebaseFirestore,
     data: Map<String, String>,
     onResult: (Boolean) -> Unit
 ) {
-    val storageRef = storage.reference.child("flora_fotos/plant_${System.currentTimeMillis()}.jpg")
-    val baos = ByteArrayOutputStream()
-    bitmap.compress(Bitmap.CompressFormat.JPEG, 80, baos)
-
-    storageRef.putBytes(baos.toByteArray()).addOnSuccessListener {
-        storageRef.downloadUrl.addOnSuccessListener { uri ->
+    val storageRef = storage.reference.child("flora_fotos/HD_${System.currentTimeMillis()}.jpg")
+    storageRef.putFile(uri).addOnSuccessListener {
+        storageRef.downloadUrl.addOnSuccessListener { downloadUri ->
             val finalData = data.toMutableMap()
-            finalData["url"] = uri.toString()
-
+            finalData["url"] = downloadUri.toString()
             db.collection("Flora_datos").add(finalData)
                 .addOnSuccessListener { onResult(true) }
                 .addOnFailureListener { onResult(false) }
